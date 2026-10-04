@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "golded-ftn-hudson"
+version = "1.0.0"
+description = "Strict indexed reader for classic Hudson message bases"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{name = "GoldED.dev contributors"}]
+dependencies = ["golded-ftn>=1.0.0,<2"]
+classifiers = ["Programming Language :: Python :: 3", "Programming Language :: Python :: 3.12", "Programming Language :: Python :: 3.13", "Programming Language :: Python :: 3.14", "Typing :: Typed", "Operating System :: OS Independent"]
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.11", "mypy>=1.15", "build>=1.2", "twine>=6", "hatchling>=1.26"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/golded_ftn_hudson"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "tests", "scripts", "docs", "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md", "LICENSE", "pyproject.toml"]
+
+[tool.hatch.build.targets.sdist.hooks.custom]
+path = "scripts/sdist_hook.py"
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+strict = true
+files = ["src", "tests", "scripts"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.uv.sources]
+golded-ftn = {path = "../golded-ftn", editable = true}

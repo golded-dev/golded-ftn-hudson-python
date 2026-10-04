@@ -1,0 +1,45 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ['3.12', '3.13', '3.14']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: golded-ftn-hudson
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.GOLDED_FTN_REPOSITORY || 'golded-dev/golded-ftn' }}
+          path: golded-ftn
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked --python ${{ matrix.python }}
+        working-directory: golded-ftn-hudson
+      - run: uv run ruff check . && uv run ruff format --check . && uv run mypy
+        working-directory: golded-ftn-hudson
+      - run: uv run python -m mypy.stubtest golded_ftn_hudson
+        working-directory: golded-ftn-hudson
+      - run: uv run pytest
+        working-directory: golded-ftn-hudson
+      - run: uv build && uv run twine check dist/* && uv run python scripts/verify_distribution.py
+        working-directory: golded-ftn-hudson
+  portable:
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: golded-ftn-hudson
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.GOLDED_FTN_REPOSITORY || 'golded-dev/golded-ftn' }}
+          path: golded-ftn
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked --python 3.14
+        working-directory: golded-ftn-hudson
+      - run: uv run pytest
+        working-directory: golded-ftn-hudson

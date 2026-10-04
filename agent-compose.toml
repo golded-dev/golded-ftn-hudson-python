@@ -1,0 +1,11 @@
+version = 1
+
+[roots]
+local = ".agent-fragments"
+private = "../../odinns/agent-fragments"
+
+[compose]
+common = ["local:project.md"]
+
+[outputs."AGENTS.md"]
+fragments = ["private:personas/ash.md"]
