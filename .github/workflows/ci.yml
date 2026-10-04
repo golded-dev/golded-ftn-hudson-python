@@ -9,22 +9,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          path: golded-ftn-hudson
+          path: golded-ftn-hudson-python
       - uses: actions/checkout@v4
         with:
-          repository: ${{ vars.GOLDED_FTN_REPOSITORY || 'golded-dev/golded-ftn' }}
-          path: golded-ftn
+          repository: ${{ vars.GOLDED_FTN_REPOSITORY || 'golded-dev/golded-ftn-python' }}
+          path: golded-ftn-python
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --locked --python ${{ matrix.python }}
-        working-directory: golded-ftn-hudson
+        working-directory: golded-ftn-hudson-python
       - run: uv run ruff check . && uv run ruff format --check . && uv run mypy
-        working-directory: golded-ftn-hudson
+        working-directory: golded-ftn-hudson-python
       - run: uv run python -m mypy.stubtest golded_ftn_hudson
-        working-directory: golded-ftn-hudson
+        working-directory: golded-ftn-hudson-python
       - run: uv run pytest
-        working-directory: golded-ftn-hudson
+        working-directory: golded-ftn-hudson-python
       - run: uv build && uv run twine check dist/* && uv run python scripts/verify_distribution.py
-        working-directory: golded-ftn-hudson
+        working-directory: golded-ftn-hudson-python
   portable:
     strategy:
       matrix:
@@ -33,13 +33,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          path: golded-ftn-hudson
+          path: golded-ftn-hudson-python
       - uses: actions/checkout@v4
         with:
-          repository: ${{ vars.GOLDED_FTN_REPOSITORY || 'golded-dev/golded-ftn' }}
-          path: golded-ftn
+          repository: ${{ vars.GOLDED_FTN_REPOSITORY || 'golded-dev/golded-ftn-python' }}
+          path: golded-ftn-python
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --locked --python 3.14
-        working-directory: golded-ftn-hudson
+        working-directory: golded-ftn-hudson-python
       - run: uv run pytest
-        working-directory: golded-ftn-hudson
+        working-directory: golded-ftn-hudson-python

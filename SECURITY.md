@@ -1,9 +1,8 @@
 # Security
 
-Treat message areas as untrusted binary input. The reader checks file bounds and
-decodes strictly, but loads the complete area into memory. Apply file-size limits
-in callers handling arbitrary uploads. Read only stable areas.
+Treat message archives as untrusted input. Readers validate record boundaries,
+offsets and decoding, but archives must remain stable while being read.
 
-Report suspected vulnerabilities privately to the repository maintainer before
-posting exploit data publicly. Include a minimal synthetic reproducer and the
-package and Python versions. Never attach private message archives or credentials.
+Report vulnerabilities privately through [GitHub security advisories](https://github.com/golded-dev/golded-ftn-hudson-python/security/advisories/new).
+Do not put private archives, message contents or credentials in public issues.
+The supported version is 1.1.x.

@@ -1,9 +1,16 @@
 # golded-ftn-hudson
 
+Repository: [`golded-ftn-hudson-python`](https://github.com/golded-dev/golded-ftn-hudson-python).
+The distribution remains `golded-ftn-hudson`; imports use `golded_ftn_hudson`.
+The source is public on GitHub. This package has not been released on PyPI.
+
 Read classic Hudson message bases through the `golded-ftn` models. Python 3.12+.
 
 ```sh
-pip install golded-ftn-hudson
+git clone https://github.com/golded-dev/golded-ftn-python.git
+git clone https://github.com/golded-dev/golded-ftn-hudson-python.git
+cd golded-ftn-hudson-python
+uv sync --locked
 ```
 
 ```python
@@ -98,7 +105,7 @@ uv run twine check dist/*
 uv run python scripts/verify_distribution.py
 ```
 
-uv uses sibling `../golded-ftn` for development. Distribution metadata contains
+uv uses sibling `../golded-ftn-python` for development. Distribution metadata contains
 only `golded-ftn>=1.1.0,<2`. The sdist hook strips the local uv source mapping;
 the development lock is excluded. See [contributing](CONTRIBUTING.md) and
 [release checks](docs/release.md).
