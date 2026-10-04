@@ -9,11 +9,13 @@ from collections.abc import Iterator
 from datetime import datetime
 from os import PathLike
 from pathlib import Path
+from typing import Literal
 
 from golded_ftn import (
     MessageProvenance,
     ParsedMessage,
     ParserException,
+    ReaderIssue,
     ReaderOptions,
     detect_charset,
     parse_body,
@@ -28,8 +30,15 @@ _INDEX_SIZE = 3
 _BLOCK_SIZE = 256
 
 
-def _fail(path: Path, offset: int, error: Exception) -> ParserException:
-    return ParserException(f"Cannot parse Hudson file {path} at byte {offset}: {error}")
+class _ParseFailure(ParserException):
+    def __init__(self, path: Path, offset: int, error: Exception) -> None:
+        super().__init__(f"Cannot parse Hudson file {path} at byte {offset}: {error}")
+        self.path = path
+        self.offset = offset
+
+
+def _fail(path: Path, offset: int, error: Exception) -> _ParseFailure:
+    return _ParseFailure(path, offset, error)
 
 
 def _invalid(path: Path, offset: int, reason: str) -> None:
@@ -171,6 +180,151 @@ class HudsonReader:
         self, path: str | PathLike[str], options: ReaderOptions | None = None
     ) -> Iterator[ParsedMessage]:
         options = options or ReaderOptions()
+        if options.archive_mode:
+            yield from self._read_archive(Path(path), options)
+        else:
+            yield from self._read_strict(path, options)
+
+    @staticmethod
+    def _issue(
+        options: ReaderOptions,
+        error: ParserException,
+        action: Literal["recovered", "skipped", "stopped"],
+        code: str,
+        source_id: str | None = None,
+    ) -> None:
+        # Only location data is copied from parser errors; their cause may contain text.
+        assert isinstance(error, _ParseFailure)
+        assert options.on_issue is not None
+        options.on_issue(
+            ReaderIssue(
+                source_type="hudson",
+                source_path=str(error.path),
+                action=action,
+                code=code,
+                detail="ASCII decoding recovered with configured fallback."
+                if action == "recovered"
+                else "Record validation failed."
+                if action == "skipped"
+                else "Safe record traversal stopped.",
+                source_id=source_id,
+                source_offset=error.offset,
+            )
+        )
+
+    def _read_archive(
+        self, directory: Path, options: ReaderOptions
+    ) -> Iterator[ParsedMessage]:
+        try:
+            paths = [
+                _find(directory, name)
+                for name in ("MSGIDX.BBS", "MSGHDR.BBS", "MSGTXT.BBS")
+            ]
+            index, headers, texts = (file.read_bytes() for file in paths)
+            for raw, size, file in zip(
+                (index, headers, texts), (3, 187, 256), paths, strict=True
+            ):
+                _aligned(raw, size, file)
+        except ParserException as error:
+            self._issue(options, error, "stopped", "unsafe_structure")
+            return
+        index_path, header_path, text_path = paths
+        result: list[ParsedMessage] = []
+        seen: set[int] = set()
+        for slot in range(len(index) // 3):
+            msgno, board = struct.unpack_from("<HB", index, slot * 3)
+            if msgno == 0xFFFF:
+                continue
+            base = slot * 187
+            if base + 187 > len(headers):
+                structure_error = _fail(
+                    header_path, base, ValueError("Indexed header is missing")
+                )
+                self._issue(
+                    options, structure_error, "stopped", "unsafe_structure", str(msgno)
+                )
+                break
+            raw = headers[base : base + 187]
+            words = struct.unpack_from("<10H2BH3B", raw)
+            if words[13] & 1:
+                continue
+            if msgno in seen:
+                duplicate_error = _fail(
+                    index_path, slot * 3, ValueError("Duplicate active message number")
+                )
+                self._issue(
+                    options,
+                    duplicate_error,
+                    "stopped",
+                    "duplicate_message_number",
+                    str(msgno),
+                )
+                break
+            seen.add(msgno)
+            failure: ParserException | None = None
+            recovered: ParserException | None = None
+            try:
+                if not 1 <= msgno <= 65534:
+                    _invalid(index_path, slot * 3, "Invalid active message number")
+                if not 1 <= board <= 200:
+                    _invalid(index_path, slot * 3 + 2, "Invalid active board")
+                if words[0] != msgno:
+                    _invalid(
+                        header_path, base, "Header message number differs from index"
+                    )
+                if words[15] != board:
+                    _invalid(header_path, base + 26, "Header board differs from index")
+                try:
+                    message = self._message(
+                        raw,
+                        base,
+                        msgno,
+                        board,
+                        words,
+                        texts,
+                        header_path,
+                        text_path,
+                        options,
+                    )
+                except ParserException as error:
+                    cause = error.__cause__
+                    if (
+                        not isinstance(cause, UnicodeDecodeError)
+                        or cause.encoding != "ascii"
+                    ):
+                        raise
+                    fallback = detect_charset(b"", options.fallback_charset)
+                    message = self._message(
+                        raw,
+                        base,
+                        msgno,
+                        board,
+                        words,
+                        texts,
+                        header_path,
+                        text_path,
+                        options,
+                        fallback,
+                    )
+                    recovered = error
+            except ParserException as error:
+                failure = error
+            if failure is not None:
+                self._issue(
+                    options, failure, "skipped", "record_parse_error", str(msgno)
+                )
+                continue
+            if recovered is not None:
+                self._issue(
+                    options, recovered, "recovered", "ascii_decode_fallback", str(msgno)
+                )
+            result.append(message)
+        yield from sorted(result, key=lambda message: message.msgno)
+
+    def _read_strict(
+        self, path: str | PathLike[str], options: ReaderOptions | None = None
+    ) -> Iterator[ParsedMessage]:
+        options = options or ReaderOptions()
         directory = Path(path)
         index_path = _find(directory, "MSGIDX.BBS")
         header_path = _find(directory, "MSGHDR.BBS")
@@ -249,11 +403,14 @@ class HudsonReader:
         header_path: Path,
         text_path: Path,
         options: ReaderOptions,
+        charset_override: str | None = None,
     ) -> ParsedMessage:
         date = _pascal(raw, 33, 9, header_path, base)
         clock = _pascal(raw, 27, 6, header_path, base)
         text = _Text(texts, words[4], words[5], text_path)
         charset = _charset(text, options, text_path)
+        if charset_override is not None:
+            charset = charset_override
         decoded: list[str] = []
         for offset, width in ((78, 36), (42, 36), (114, 73)):
             value = _pascal(raw, offset, width, header_path, base)

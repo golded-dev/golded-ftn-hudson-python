@@ -99,7 +99,7 @@ uv run python scripts/verify_distribution.py
 ```
 
 uv uses sibling `../golded-ftn` for development. Distribution metadata contains
-only `golded-ftn>=1.0.0,<2`. The sdist hook strips the local uv source mapping;
+only `golded-ftn>=1.1.0,<2`. The sdist hook strips the local uv source mapping;
 the development lock is excluded. See [contributing](CONTRIBUTING.md) and
 [release checks](docs/release.md).
 
@@ -117,3 +117,29 @@ fixtures do not represent Pascal text blocks and are not copied here. Tests use
 independent synthetic binary fixtures. No private message archives are included.
 
 The package code is MIT licensed.
+
+## Archive mode
+
+Strict reading remains the default. Archive mode requires a report callback:
+
+```python
+from golded_ftn import ReaderIssue, ReaderOptions
+
+issues: list[ReaderIssue] = []
+options = ReaderOptions(archive_mode=True, on_issue=issues.append)
+# Pass options to HudsonReader().read(source, options).
+```
+
+Issues carry `recovered`, `skipped` or `stopped`, the actual filename, record
+identity and physical offset. Their detail contains no message contents. A stop
+means the traversal is incomplete; a validated prefix may still be returned.
+Multiple issues can describe one record, including recovery followed by a skip.
+Filesystem errors and callback exceptions propagate. Files must remain stable.
+
+Failed active records are skipped using the next fixed index/header slot.
+Duplicate message numbers, missing indexed headers and file alignment failures
+stop traversal. Charset, ID and address conflicts are skipped.
+
+If declared ASCII cannot decode a payload, the configured fallback is tried
+strictly and reported. The original charset control stays unchanged. Other
+decoding failures are skipped; there is no lossy decoding or mojibake repair.

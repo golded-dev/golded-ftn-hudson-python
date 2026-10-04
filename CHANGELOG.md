@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.0 — Unreleased
+
+Add reported archive reading with fixed-slot record skips and strict ASCII
+fallback. Ambiguous identities or incomplete structure stop traversal. Strict
+reading remains the default.
+
 ## 1.0.0
 
 - Read classic Hudson `.BBS` bases through the core reader protocol.

@@ -493,3 +493,147 @@ def test_zero_block_body_error_uses_no_text_offset(tmp_path: Path) -> None:
                 tmp_path, ReaderOptions(fallback_charset="nonexistent-codec")
             )
         )
+
+
+def test_archive_skips_bad_record_and_keeps_following(tmp_path: Path) -> None:
+    from golded_ftn import ReaderIssue
+
+    area(tmp_path)
+    (tmp_path / "MSGIDX.BBS").write_bytes(
+        b"".join(struct.pack("<HB", n, 7) for n in (1, 2, 3))
+    )
+    bad = bytearray(header(2))
+    bad[78] = 36
+    (tmp_path / "MSGHDR.BBS").write_bytes(header(1) + bad + header(3))
+    issues: list[ReaderIssue] = []
+    result = list(
+        HudsonReader().read(
+            tmp_path, ReaderOptions(archive_mode=True, on_issue=issues.append)
+        )
+    )
+    assert [m.msgno for m in result] == [1, 3]
+    assert [(i.action, i.code, i.source_id, i.source_offset) for i in issues] == [
+        ("skipped", "record_parse_error", "2", 265)
+    ]
+
+
+def test_archive_ascii_fallback(tmp_path: Path) -> None:
+    from golded_ftn import ReaderIssue
+
+    area(tmp_path, b"\x01CHRS: ASCII 1\r" + "blå".encode("cp850"))
+    issues: list[ReaderIssue] = []
+    result = list(
+        HudsonReader().read(
+            tmp_path, ReaderOptions(archive_mode=True, on_issue=issues.append)
+        )
+    )
+    assert result[0].body_text.endswith("blå")
+    assert [(i.action, i.code) for i in issues] == [
+        ("recovered", "ascii_decode_fallback")
+    ]
+    with pytest.raises(ParserException):
+        messages(tmp_path)
+
+
+def test_archive_duplicate_stops_prefix(tmp_path: Path) -> None:
+    from golded_ftn import ReaderIssue
+
+    area(tmp_path)
+    (tmp_path / "MSGIDX.BBS").write_bytes(
+        b"".join(struct.pack("<HB", n, 7) for n in (1, 1, 3))
+    )
+    (tmp_path / "MSGHDR.BBS").write_bytes(header(1) + header(1) + header(3))
+    issues: list[ReaderIssue] = []
+    result = list(
+        HudsonReader().read(
+            tmp_path, ReaderOptions(archive_mode=True, on_issue=issues.append)
+        )
+    )
+    assert [m.msgno for m in result] == [1]
+    assert issues[0].action == "stopped"
+
+
+def test_archive_reporter_exception_propagates(tmp_path: Path) -> None:
+    area(tmp_path, b"\x01CHRS: ASCII 1\r\xff")
+    sentinel = ParserException("reporter sentinel")
+
+    def report(issue: object) -> None:
+        raise sentinel
+
+    with pytest.raises(ParserException) as caught:
+        list(
+            HudsonReader().read(
+                tmp_path, ReaderOptions(archive_mode=True, on_issue=report)
+            )
+        )
+    assert caught.value is sentinel
+
+
+def test_archive_alignment_stops_without_messages(tmp_path: Path) -> None:
+    from golded_ftn import ReaderIssue
+
+    area(tmp_path)
+    file = tmp_path / "MSGIDX.BBS"
+    file.write_bytes(file.read_bytes() + b"x")
+    issues: list[ReaderIssue] = []
+    assert (
+        list(
+            HudsonReader().read(
+                tmp_path, ReaderOptions(archive_mode=True, on_issue=issues.append)
+            )
+        )
+        == []
+    )
+    assert [(i.action, i.source_path, i.source_offset) for i in issues] == [
+        ("stopped", str(file), 3)
+    ]
+
+
+def test_archive_missing_header_retains_prefix(tmp_path: Path) -> None:
+    from golded_ftn import ReaderIssue
+
+    area(tmp_path)
+    file = tmp_path / "MSGIDX.BBS"
+    file.write_bytes(file.read_bytes() + struct.pack("<HB", 43, 7))
+    issues: list[ReaderIssue] = []
+    result = list(
+        HudsonReader().read(
+            tmp_path, ReaderOptions(archive_mode=True, on_issue=issues.append)
+        )
+    )
+    assert [m.msgno for m in result] == [42]
+    assert [(i.action, i.source_offset) for i in issues] == [("stopped", 187)]
+
+
+def test_archive_utf8_still_skips_and_fallback_failure_skips(tmp_path: Path) -> None:
+    from golded_ftn import ReaderIssue
+
+    for declaration, fallback in ((b"UTF-8", "CP850"), (b"ASCII", "UTF-8")):
+        area(tmp_path, b"\x01CHRS: " + declaration + b" 1\r\xff")
+        issues: list[ReaderIssue] = []
+        assert (
+            list(
+                HudsonReader().read(
+                    tmp_path,
+                    ReaderOptions(
+                        fallback_charset=fallback,
+                        archive_mode=True,
+                        on_issue=issues.append,
+                    ),
+                )
+            )
+            == []
+        )
+        assert [(i.action, i.code) for i in issues] == [
+            ("skipped", "record_parse_error")
+        ]
+        assert "xff" not in issues[0].detail
+
+
+def test_archive_missing_file_remains_filesystem_error(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError):
+        list(
+            HudsonReader().read(
+                tmp_path, ReaderOptions(archive_mode=True, on_issue=lambda issue: None)
+            )
+        )
