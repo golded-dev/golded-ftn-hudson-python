@@ -1,0 +1,32 @@
+name: Publish to PyPI
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Reviewed GitHub release tag
+        required: true
+        default: v1.2.0
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: pypi-${{ inputs.tag }}
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download reviewed release archives
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern RELEASE-SHA256.txt
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.whl' --pattern '*.tar.gz' --dir dist
+          sha256sum --check RELEASE-SHA256.txt
+      - name: Publish to PyPI with Trusted Publishing
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1

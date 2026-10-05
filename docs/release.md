@@ -52,3 +52,31 @@ of this local preparation.
 
 Archive checksums are recorded separately in `RELEASE-SHA256.txt` at the
 repository root, outside the archives, after the final build.
+
+## PyPI Trusted Publishing
+
+Create a PyPI account, verify its email and configure two-factor authentication.
+For a first publication, add a pending publisher at
+<https://pypi.org/manage/account/publishing/> with these exact fields:
+
+- PyPI project: `golded-ftn-hudson`
+- GitHub owner: `golded-dev`
+- GitHub repository: `golded-ftn-hudson-python`
+- Workflow filename: `publish.yml`
+- Environment: `pypi`
+
+See [PyPI's pending-publisher instructions](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/).
+No API token or password is required by the workflow. The account setup is a
+manual prerequisite; a GitHub release does not create the PyPI project.
+
+After this tag's CI succeeds and the GitHub release contains both archives and
+`RELEASE-SHA256.txt`, run:
+
+```sh
+gh workflow run publish.yml --repo golded-dev/golded-ftn-hudson-python -f tag=v1.2.0
+```
+
+The workflow verifies SHA-256 and uploads those exact release assets. Publish
+core first, verify installation from PyPI, then dispatch the format workflows.
+Confirm the workflow result, PyPI version and hashes, and installation in a fresh
+environment. Do not store publishing credentials in this repository.
