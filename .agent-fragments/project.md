@@ -1,6 +1,6 @@
 # golded-ftn-hudson
 
-This Python package reads classic Hudson .BBS bases through golded-ftn models.
+This Python package reads and edits classic Hudson .BBS bases through golded-ftn models.
 Use MSGIDX.BBS as authority over 187-byte headers; decode 256-byte Pascal text
 blocks before charset detection. The sibling PHP fixtures use the wrong block
 format and must not become format tests. GoldBase is a separate format.
@@ -14,7 +14,12 @@ Use independent synthetic fixtures. Keep private archives out of tests. Run the
 README checks and scripts/verify_distribution.py; packed dependencies must use
 the public core constraint rather than local checkout paths.
 
-Keep writer, discovery, filtering, database and core changes outside this reader.
+Keep discovery, filtering, database and core changes outside this format package.
+Writers start with raw records and preserve untouched bytes. Lock MSGINFO.BBS
+byte 407 per operation; use the shared descriptor for all access to that file.
+GoldED concurrent use stays disabled until competing reads/writes and refresh are
+verified against a pinned build. Scan indices use the explicit system directory.
+Read docs/writer.md before changing writer records, locking or auxiliary files.
 Edit this fragment or agent-compose.toml, then preview, build and check. Private
 persona sources stay outside distributions. Commits and publication need an
 explicit request.

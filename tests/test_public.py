@@ -7,7 +7,7 @@ import golded_ftn_hudson
 
 
 def test_exports() -> None:
-    assert golded_ftn_hudson.__all__ == ["HudsonReader"]
+    assert golded_ftn_hudson.__all__ == ["HudsonReader", "HudsonWriter"]
     assert golded_ftn_hudson.HudsonReader.__module__ == "golded_ftn_hudson.reader"
     package = Path(golded_ftn_hudson.__file__).parent
     assert (package / "py.typed").is_file()

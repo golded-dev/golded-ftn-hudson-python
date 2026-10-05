@@ -4,7 +4,8 @@ Repository: [`golded-ftn-hudson-python`](https://github.com/golded-dev/golded-ft
 The distribution remains `golded-ftn-hudson`; imports use `golded_ftn_hudson`.
 The source is public on GitHub. This package has not been released on PyPI.
 
-Read classic Hudson message bases through the `golded-ftn` models. Python 3.12+.
+Read and edit classic Hudson bases through the `golded-ftn` models. Python 3.12+.
+Version 1.2.0 is prepared locally; these writer changes are unreleased.
 
 ```sh
 git clone https://github.com/golded-dev/golded-ftn-python.git
@@ -32,7 +33,9 @@ with TemporaryDirectory() as directory:
 
 The directory must contain one regular file for each required name. Names are
 matched without regard to case; symlinks and ambiguous variants are rejected.
-`MSGINFO.BBS`, `MSGTOIDX.BBS` and `LASTREAD.BBS` are unused. This reader supports
+The standalone reader ignores `MSGINFO.BBS`, `MSGTOIDX.BBS` and `LASTREAD.BBS`.
+Writer sessions validate and maintain the first two, and preserve lastread data.
+This reader supports
 classic `.BBS` Hudson only. GoldBase `.DAT` files use different records.
 
 The 3-byte index determines the corresponding 187-byte header slot. Active
@@ -89,7 +92,7 @@ because the base does not store configured area names or their display order.
 Provenance identifies `hudson`, the actual `MSGHDR.BBS` path, the message number
 as text and the header's physical byte offset.
 
-There is no writer, board filter, area discovery, database adapter or core change.
+There is no board filter in the standalone reader, area discovery or database adapter.
 
 ## Development
 
@@ -106,7 +109,7 @@ uv run python scripts/verify_distribution.py
 ```
 
 uv uses sibling `../golded-ftn-python` for development. Distribution metadata contains
-only `golded-ftn>=1.1.0,<2`. The sdist hook strips the local uv source mapping;
+only `golded-ftn>=1.2.0,<2`. The sdist hook strips the local uv source mapping;
 the development lock is excluded. See [contributing](CONTRIBUTING.md) and
 [release checks](docs/release.md).
 
@@ -150,3 +153,103 @@ stop traversal. Charset, ID and address conflicts are skipped.
 If declared ASCII cannot decode a payload, the configured fallback is tried
 strictly and reported. The original charset control stays unchanged. Other
 decoding failures are skipped; there is no lossy decoding or mojibake repair.
+
+
+## Offline writer
+
+`HudsonWriter.create(path)` creates the complete base, not one board. It rejects
+any existing base filename, including case variants. Initial files are
+`MSGINFO.BBS` (406 zero bytes), `LASTREAD.BBS` (400 zero bytes), empty
+`MSGHDR.BBS`, `MSGIDX.BBS`, `MSGTOIDX.BBS`, `MSGTXT.BBS`, `NETMAIL.BBS` and
+`ECHOMAIL.BBS`. Existing lastread data is never changed by editing operations.
+
+```python
+from tempfile import TemporaryDirectory
+from golded_ftn import MessagePatch, OutgoingMessage
+from golded_ftn_hudson import HudsonWriter
+
+with TemporaryDirectory() as directory:
+    writer = HudsonWriter()
+    writer.create(directory)
+    with writer.open(directory, board=7) as session:
+        added = session.append(
+            OutgoingMessage(
+                from_name="Odinn", to_name="Reader", subject="Hello", body_text="Hello!"
+            )
+        )
+        current = session.read(added.identity.msgno)
+        updated = session.update(
+            current.identity,
+            MessagePatch(body_text="A longer message"),
+            current.revision,
+        )
+        session.delete(updated.identity, updated.revision)
+```
+
+The board is explicit and must be 1–200. Identity contains the format, resolved
+base path, board and global Hudson message number. Number allocation includes
+deleted headers and preserves the high-number watermark. Deleted numbers are
+not reused. Replies remain untouched in other records. The read-count word is
+preserved; next-reply links and reply lists cannot be represented and are rejected.
+
+A session locks byte 407 of `MSGINFO.BBS` for each operation, re-reads the files,
+validates every active record and the information counts, then releases the lock
+after flushing. The lock position comes from the packed 406-byte `HudsInfo`
+structure plus one. The shared core lock manager retains the lock-file descriptor
+and serializes sessions in the same process. Callers must not directly open or
+close base files while a session operation runs.
+
+Revision tokens cover identity, physical header/index/text locations and SHA-256
+of raw header, index, recipient-index and allocated text-block bytes. Update and
+delete compare the token under the lock. A missing or changed target raises
+`ConflictError`; an unrelated append does not invalidate the target token.
+
+Updates begin with the raw header and text. Omitted fields keep their values.
+Explicit `None` clears representable optional fields, including dates, addresses,
+external MSGID and reply links. Required text/name fields and attributes cannot
+be cleared. Unknown controls, header padding, read count, cost, attribute bits
+and dates remain unless explicitly changed. A body-text patch preserves existing
+control and routing lines. `control_lines` replaces general controls while
+omitted `external_id`, addresses and routing keep MSGID, FMPT/TOPT/INTL and PATH.
+Use the corresponding structured patch fields to replace or clear those values;
+conflicting explicit controls are rejected. Pure attribute updates preserve all allocated text bytes. Content changes
+append fresh 256-byte Pascal text blocks and change the existing header slot.
+Old blocks remain allocated; there is no packing or repair.
+
+The default encoding is CP850. Serialization uses strict encoding, rejects
+oversized Pascal fields, out-of-range integers and contradictory charset controls,
+and does not generate MSGID or routing, or perform duplicate checks. Dates are naive and
+must lie within 1980–2079. Domains cannot be stored; point addresses use explicit
+FMPT/TOPT controls. `MSGTOIDX.BBS` contains the recipient, or the source's
+`* Received *`/`* Deleted *` markers. Scan indices contain physical header slots,
+not message numbers. Set net-transmit and echo-transmit bits enqueue the slot. Existing entries
+remain until explicit deletion, matching GoldED's write path.
+
+GoldED stores scan indices at its configured system path. Pass
+`writer.open(base, board=7, scan_path=golded_system_path)` when that differs from
+the base directory. The default is the base directory. Existing scan files are
+validated. Missing scan files are created only when an operation adds an entry.
+Empty scan files are retained after removal; GoldED treats them as empty indices.
+One scan directory must belong to this base; sharing it among independent bases
+is outside this lock's scope.
+
+Each completed operation is a separate commit. Before any mutation the writer
+snapshots every affected file, restores bytes and sizes in place on failure and
+keeps previous completed operations. A failed rollback raises `RollbackError`
+with base and operation details and makes the session unusable. This protects
+handled I/O failures, not process termination or power loss. There is no crash
+journal or claim that every partial write can be detected.
+
+| Platform | Writer mode | GoldED compatibility |
+| --- | --- | --- |
+| macOS | Offline; byte-407 lock and rollback tested locally | Current-build integration deferred |
+| Linux | Offline; POSIX record-lock implementation | Not exercised here |
+| Windows | Offline; core Windows lock implementation | Not exercised here |
+
+`WriterOptions(concurrent=True)` raises `UnsupportedOperationError` on every
+platform. Stop GoldED while reading or editing a base. The standalone
+`HudsonReader` still requires a stable directory; session `read()` supplies a
+locked consistent read. Live support needs both competing writes and GoldED's
+scan/cache/refresh behavior tested against a pinned build.
+
+Source evidence and test coverage are recorded in [writer notes](docs/writer.md).

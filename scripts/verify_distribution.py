@@ -42,7 +42,7 @@ def main() -> None:
         assert metadata["Version"] == project["version"]
         assert metadata["Requires-Python"] == ">=3.12"
         assert metadata["License-Expression"] == "MIT"
-        assert metadata.get_all("Requires-Dist", []) == ["golded-ftn<2,>=1.1.0"]
+        assert metadata.get_all("Requires-Dist", []) == ["golded-ftn<2,>=1.2.0"]
         assert any(n.endswith("/licenses/LICENSE") for n in names)
     with tempfile.TemporaryDirectory(prefix="golded-ftn-check-") as temporary:
         work = Path(temporary)
@@ -70,7 +70,7 @@ def main() -> None:
         package_info = email.message_from_bytes((source / "PKG-INFO").read_bytes())
         assert package_info["Name"] == project["name"]
         assert package_info["Version"] == project["version"]
-        assert package_info.get_all("Requires-Dist", []) == ["golded-ftn<2,>=1.1.0"]
+        assert package_info.get_all("Requires-Dist", []) == ["golded-ftn<2,>=1.2.0"]
         assert package_info["Requires-Python"] == ">=3.12"
         assert package_info["License-Expression"] == "MIT"
         run("uv", "build", "--wheel", cwd=source)
@@ -113,7 +113,7 @@ def main() -> None:
                 "-c",
                 "import golded_ftn, golded_ftn_hudson; "
                 "from importlib.metadata import requires; "
-                'assert requires("golded-ftn-hudson") == ["golded-ftn<2,>=1.1.0"]; '
+                'assert requires("golded-ftn-hudson") == ["golded-ftn<2,>=1.2.0"]; '
                 "print(golded_ftn.__file__, golded_ftn_hudson.__file__)",
                 cwd=work,
             )
