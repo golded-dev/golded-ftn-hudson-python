@@ -18,7 +18,6 @@ from golded_ftn import (
     MessagePatch,
     OutgoingMessage,
     RollbackError,
-    UnsupportedOperationError,
     WriterError,
     WriterOptions,
 )
@@ -325,7 +324,9 @@ def test_rollback_failure_poison_session(tmp_path: Path) -> None:
     fixture(tmp_path)
     with HudsonWriter().open(tmp_path, 7) as session:
         session._io = FailAlways()
-        with pytest.raises(RollbackError, match="append.*rollback failed"):
+        with pytest.raises(
+            RollbackError, match="Transaction rollback failed during append"
+        ):
             session.append(outgoing())
         with pytest.raises(WriterError, match="unusable"):
             session.read(42)
@@ -363,9 +364,14 @@ with open(sys.argv[1], 'r+b') as stream:
         assert session.read(42).identity.msgno == 42
 
 
-def test_concurrent_mode_rejected(tmp_path: Path) -> None:
-    with pytest.raises(UnsupportedOperationError):
-        HudsonWriter().open(tmp_path, 1, WriterOptions(concurrent=True))
+def test_concurrent_mode_accepted(tmp_path: Path) -> None:
+    fixture(tmp_path)
+    with HudsonWriter().open(
+        tmp_path, 7, WriterOptions(concurrent=True)
+    ) as session:
+        assert session.options.concurrent is True
+        result = session.append(outgoing(subject="Live"))
+        assert session.read(result.identity.msgno).message.subject == "Live"
 
 
 @pytest.mark.parametrize("step", range(1, 13))

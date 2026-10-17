@@ -2,12 +2,12 @@
 
 Repository: [`golded-ftn-hudson-python`](https://github.com/golded-dev/golded-ftn-hudson-python).
 The distribution remains `golded-ftn-hudson`; imports use `golded_ftn_hudson`.
-The source is public on GitHub. [Version 1.2.0 is available on PyPI](https://pypi.org/project/golded-ftn-hudson/1.2.0/).
+The source is public on GitHub. [Version 1.3.0 is available on PyPI](https://pypi.org/project/golded-ftn-hudson/1.3.0/).
 
 Install with Python 3.12 or newer:
 
 ```sh
-python -m pip install golded-ftn-hudson==1.2.0
+python -m pip install golded-ftn-hudson==1.3.0
 ```
 
 Read and edit classic Hudson bases through the `golded-ftn` models. Python 3.12+.
@@ -116,7 +116,7 @@ uv run python scripts/verify_distribution.py
 ```
 
 uv uses sibling `../golded-ftn-python` for development. Distribution metadata contains
-only `golded-ftn>=1.2.0,<2`. The sdist hook strips the local uv source mapping;
+only `golded-ftn>=1.3.0,<2`. The sdist hook strips the local uv source mapping;
 the development lock is excluded. See [contributing](CONTRIBUTING.md) and
 [release checks](docs/release.md).
 
@@ -165,8 +165,10 @@ decoding failures are skipped; there is no lossy decoding or mojibake repair.
 ## Offline writer
 
 `HudsonWriter.create(path)` creates the complete base, not one board. It rejects
-any existing base filename, including case variants. Initial files are
-`MSGINFO.BBS` (406 zero bytes), `LASTREAD.BBS` (400 zero bytes), empty
+any existing base filename, including case variants. Pass
+`HudsonWriterOptions(extension_case="lower")` to create `msginfo.bbs` and
+friends instead. Open and read already use the casing that is on disk. Initial
+files are `MSGINFO.BBS` (406 zero bytes), `LASTREAD.BBS` (400 zero bytes), empty
 `MSGHDR.BBS`, `MSGIDX.BBS`, `MSGTOIDX.BBS`, `MSGTXT.BBS`, `NETMAIL.BBS` and
 `ECHOMAIL.BBS`. Existing lastread data is never changed by editing operations.
 
@@ -223,6 +225,13 @@ conflicting explicit controls are rejected. Pure attribute updates preserve all 
 append fresh 256-byte Pascal text blocks and change the existing header slot.
 Old blocks remain allocated; there is no packing or repair.
 
+`HudsonWriter.recovery_session(path, *, recovery_root, options=None, scan_path=..., board=1)`
+holds the same `MSGINFO.BBS` byte-407 lock across prepare/apply/settle for the
+whole physical base. Board is only a write target; it is not the lock or worker
+identity. Recovery covers the common Hudson files and scan queues in `scan_dir`.
+`LASTREAD.BBS` and `USERS.BBS` are never opened. Years outside 1980–2079 raise
+`HudsonAdapterError` without coercing the date.
+
 The default encoding is CP850. Serialization uses strict encoding, rejects
 oversized Pascal fields, out-of-range integers and contradictory charset controls,
 and does not generate MSGID or routing, or perform duplicate checks. Dates are naive and
@@ -253,8 +262,8 @@ journal or claim that every partial write can be detected.
 | Linux | Offline; POSIX record-lock implementation | Not exercised here |
 | Windows | Offline; core Windows lock implementation | Not exercised here |
 
-`WriterOptions(concurrent=True)` raises `UnsupportedOperationError` on every
-platform. Stop GoldED while reading or editing a base. The standalone
+`WriterOptions(concurrent=True)` is accepted. GoldED coexistence remains
+unverified. The standalone
 `HudsonReader` still requires a stable directory; session `read()` supplies a
 locked consistent read. Live support needs both competing writes and GoldED's
 scan/cache/refresh behavior tested against a pinned build.
