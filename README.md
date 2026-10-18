@@ -253,20 +253,28 @@ Each completed operation is a separate commit. Before any mutation the writer
 snapshots every affected file, restores bytes and sizes in place on failure and
 keeps previous completed operations. A failed rollback raises `RollbackError`
 with base and operation details and makes the session unusable. This protects
-handled I/O failures, not process termination or power loss. There is no crash
-journal or claim that every partial write can be detected.
+handled I/O failures, not process termination or power loss. Ordinary open() has no crash
+journal; use recovery_session() with a durable caller journal for staged recovery.
 
-| Platform | Writer mode | GoldED compatibility |
-| --- | --- | --- |
-| macOS | Offline; byte-407 lock and rollback tested locally | Current-build integration deferred |
-| Linux | Offline; POSIX record-lock implementation | Not exercised here |
-| Windows | Offline; core Windows lock implementation | Not exercised here |
+## GoldED compatibility profile
 
-`WriterOptions(concurrent=True)` is accepted. GoldED coexistence remains
-unverified. The standalone
-`HudsonReader` still requires a stable directory; session `read()` supplies a
-locked consistent read. Live support needs both competing writes and GoldED's
-scan/cache/refresh behavior tested against a pinned build.
+Candidate interoperability is bounded to GoldED source commit `d7449053bd674df54c4a442c92dce8c06ad7b586`,
+version 3.1.0, native macOS arm64/GCC 16 and Ubuntu 24.04 aarch64/GCC 13.
+The suite release manifest pins the resulting binaries and records actual checks.
+Other GoldED versions, Windows and network filesystems are not qualified.
+
+Writers default to offline operation. Explicit `concurrent=True` opts into the
+tested read/write/refresh/lastread/stale-save profile, not a general multiwriter
+guarantee. Standalone readers still need a stable base; a session read uses its
+format lock. MSG/Opus and Goldbase have no shared GoldED writer lock: stale-save
+detection cannot close a race between comparison and a foreign write. Keep
+same-message edits serialized. Goldbase is outside the Python C1 profile.
+
+Use format-specific WriterOptions extension_case="lower" for newly created
+Unix bases used by GoldED; preserve existing casing and reject ambiguous twins.
+Hudson scan queues belong in the configured system directory. Recovery sessions
+have a durable journal protocol; ordinary open() sessions only roll back handled
+I/O failures. UNKNOWN outcomes retain artifacts for operator reconciliation.
 
 Source evidence and test coverage are recorded in [writer notes](docs/writer.md).
 
