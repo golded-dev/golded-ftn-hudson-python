@@ -43,6 +43,3 @@ files = ["src", "tests", "scripts"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-
-[tool.uv.sources]
-golded-ftn = {path = "../golded-ftn-python-r1", editable = true}

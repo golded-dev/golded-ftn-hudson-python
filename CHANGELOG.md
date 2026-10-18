@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.0 (unreleased)
+
+- Add recoverable sessions and existing-case resolution. Keep board-specific access and configured scan directory; translate format-owned attributes at the packet boundary.
+
 ## 1.3.0 — 2026-10-17
 
 - Require `golded-ftn>=1.3.0,<2`.

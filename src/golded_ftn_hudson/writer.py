@@ -109,9 +109,7 @@ class HudsonWriterOptions(WriterOptions):
 
 def _cased_name(name: str, options: WriterOptions | None) -> str:
     case = (
-        options.extension_case
-        if isinstance(options, HudsonWriterOptions)
-        else "upper"
+        options.extension_case if isinstance(options, HudsonWriterOptions) else "upper"
     )
     return name.lower() if case == "lower" else name
 

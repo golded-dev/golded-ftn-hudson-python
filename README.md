@@ -269,3 +269,10 @@ locked consistent read. Live support needs both competing writes and GoldED's
 scan/cache/refresh behavior tested against a pinned build.
 
 Source evidence and test coverage are recorded in [writer notes](docs/writer.md).
+
+## Candidate 1.3.0
+
+Add recoverable sessions and existing-case resolution. Keep board-specific access and configured scan directory; translate format-owned attributes at the packet boundary.
+
+Linux and macOS, Python 3.12–3.14, are the release targets. Windows is outside
+this candidate's test and compatibility promises. See [release preparation](docs/release.md).

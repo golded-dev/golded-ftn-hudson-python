@@ -1,0 +1,3 @@
+# Runtime typing representations only: Literal aliases and inherited dataclass slots.
+# Public callable signatures remain checked. No function or class-wide suppression.
+golded_ftn_hudson\.writer\.HudsonWriterOptions\.__slots__

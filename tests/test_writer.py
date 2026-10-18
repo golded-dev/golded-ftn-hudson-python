@@ -366,9 +366,7 @@ with open(sys.argv[1], 'r+b') as stream:
 
 def test_concurrent_mode_accepted(tmp_path: Path) -> None:
     fixture(tmp_path)
-    with HudsonWriter().open(
-        tmp_path, 7, WriterOptions(concurrent=True)
-    ) as session:
+    with HudsonWriter().open(tmp_path, 7, WriterOptions(concurrent=True)) as session:
         assert session.options.concurrent is True
         result = session.append(outgoing(subject="Live"))
         assert session.read(result.identity.msgno).message.subject == "Live"

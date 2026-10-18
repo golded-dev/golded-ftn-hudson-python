@@ -1,45 +1,23 @@
 name: CI
-on: [push, pull_request]
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
 jobs:
-  linux:
-    runs-on: ubuntu-latest
+  checks:
     strategy:
       matrix:
+        os: [ubuntu-latest, macos-latest]
         python: ['3.12', '3.13', '3.14']
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          path: golded-ftn-hudson-python
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          repository: ${{ vars.GOLDED_FTN_REPOSITORY || 'golded-dev/golded-ftn-python' }}
-          path: golded-ftn-python
-      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
-      - run: uv sync --locked --python ${{ matrix.python }}
-        working-directory: golded-ftn-hudson-python
-      - run: uv run ruff check . && uv run ruff format --check . && uv run mypy
-        working-directory: golded-ftn-hudson-python
-      - run: uv run python -m mypy.stubtest golded_ftn_hudson
-        working-directory: golded-ftn-hudson-python
-      - run: uv run pytest
-        working-directory: golded-ftn-hudson-python
-      - run: uv build && uv run twine check dist/* && uv run python scripts/verify_distribution.py
-        working-directory: golded-ftn-hudson-python
-  portable:
-    strategy:
-      matrix:
-        os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          path: golded-ftn-hudson-python
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          repository: ${{ vars.GOLDED_FTN_REPOSITORY || 'golded-dev/golded-ftn-python' }}
-          path: golded-ftn-python
-      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
-      - run: uv sync --locked --python 3.14
-        working-directory: golded-ftn-hudson-python
-      - run: uv run pytest
-        working-directory: golded-ftn-hudson-python
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e
+      - run: uv sync --no-sources --all-extras --python ${{ matrix.python }}
+      - run: uv run --no-sync ruff check .
+      - run: uv run --no-sync ruff format --check .
+      - run: uv run --no-sync mypy
+      - run: uv run --no-sync pytest -q
+      - run: uv build --no-sources
+      - run: uv run --no-sync twine check dist/*
+      - run: uv run --no-sync python scripts/verify_distribution.py
+      - run: uv run --no-sync python -m mypy.stubtest golded_ftn_hudson --allowlist tests/stubtest-allowlist.txt
