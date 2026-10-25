@@ -9,7 +9,7 @@ from collections.abc import Iterator
 from datetime import datetime
 from os import PathLike
 from pathlib import Path
-from typing import Literal
+from typing import BinaryIO, Literal
 
 from golded_ftn import (
     MessageProvenance,
@@ -67,6 +67,19 @@ def _aligned(raw: bytes, size: int, path: Path) -> None:
         _invalid(path, len(raw) - len(raw) % size, f"Truncated {size}-byte record")
 
 
+def _aligned_size(file_size: int, size: int, path: Path) -> None:
+    if file_size % size:
+        _invalid(path, file_size - file_size % size, f"Truncated {size}-byte record")
+
+
+def _read_at(handle: BinaryIO, offset: int, length: int, path: Path) -> bytes:
+    handle.seek(offset)
+    data = handle.read(length)
+    if len(data) != length:
+        _invalid(path, offset, f"Range of {length} bytes lies outside file")
+    return data
+
+
 def _pascal(raw: bytes, start: int, width: int, path: Path, base: int) -> bytes:
     length = raw[start]
     if length >= width:
@@ -100,21 +113,36 @@ class _Text:
         length = count * _BLOCK_SIZE
         if base > len(raw) or length > len(raw) - base:
             _invalid(path, base, f"Text span of {length} bytes lies outside file")
+        self._load(raw[base : base + length] if count else b"", base, count, path)
+
+    @classmethod
+    def from_span(cls, span: bytes, file_base: int, count: int, path: Path) -> "_Text":
+        if count and len(span) != count * _BLOCK_SIZE:
+            _invalid(
+                path,
+                file_base,
+                f"Text span of {count * _BLOCK_SIZE} bytes lies outside file",
+            )
+        text = cls.__new__(cls)
+        text._load(span if count else b"", file_base, count, path)
+        return text
+
+    def _load(self, span: bytes, file_base: int, count: int, path: Path) -> None:
         payloads: list[bytes] = []
         self.starts: list[int] = []
         self.physical: list[int] = []
         total = 0
         for index in range(count):
-            block = base + index * _BLOCK_SIZE
-            length = raw[block]
+            block = index * _BLOCK_SIZE
+            length = span[block]
             # Empty blocks contribute no bytes and cannot own a logical offset.
             if length:
                 self.starts.append(total)
-                self.physical.append(block + 1)
-                payloads.append(raw[block + 1 : block + 1 + length])
+                self.physical.append(file_base + block + 1)
+                payloads.append(span[block + 1 : block + 1 + length])
                 total += length
         self.raw = b"".join(payloads)
-        self.base = base
+        self.base = file_base
 
     def offset(self, logical: int) -> int:
         if not self.starts:
@@ -171,9 +199,10 @@ def _validate_ids(text: _Text, charset: str, path: Path) -> None:
 class HudsonReader:
     """Read all boards in a stable classic Hudson directory.
 
-    Files are read separately without locking. All active records are validated
-    before the first message is returned; concurrent writes require coordination
-    by the caller.
+    Default streaming loads the index, then seeks headers and text spans. Pass
+    ``ReaderOptions(eager=True)`` to parse every active message before yielding.
+    Files are read separately without locking; concurrent writes require
+    coordination by the caller.
     """
 
     def read(
@@ -229,7 +258,7 @@ class HudsonReader:
             self._issue(options, error, "stopped", "unsafe_structure")
             return
         index_path, header_path, text_path = paths
-        result: list[ParsedMessage] = []
+        result: list[tuple[int, ParsedMessage]] = []
         seen: set[int] = set()
         for slot in range(len(index) // 3):
             msgno, board = struct.unpack_from("<HB", index, slot * 3)
@@ -318,8 +347,13 @@ class HudsonReader:
                 self._issue(
                     options, recovered, "recovered", "ascii_decode_fallback", str(msgno)
                 )
-            result.append(message)
-        yield from sorted(result, key=lambda message: message.msgno)
+            result.append((msgno, message))
+        ordered = sorted(result, key=lambda item: item[0])
+        if options.eager:
+            yield from (message for _msgno, message in ordered)
+            return
+        for _msgno, message in ordered:
+            yield message
 
     def _read_strict(
         self, path: str | PathLike[str], options: ReaderOptions | None = None
@@ -329,68 +363,90 @@ class HudsonReader:
         index_path = _find(directory, "MSGIDX.BBS")
         header_path = _find(directory, "MSGHDR.BBS")
         text_path = _find(directory, "MSGTXT.BBS")
-        index, headers, texts = (
-            file.read_bytes() for file in (index_path, header_path, text_path)
-        )
+        index = index_path.read_bytes()
         _aligned(index, _INDEX_SIZE, index_path)
-        _aligned(headers, _HEADER_SIZE, header_path)
-        _aligned(texts, _BLOCK_SIZE, text_path)
-        if len(headers) // _HEADER_SIZE < len(index) // _INDEX_SIZE:
-            _invalid(header_path, len(headers), "Indexed header record is missing")
-        result: list[ParsedMessage] = []
+        header_size = header_path.stat().st_size
+        text_size = text_path.stat().st_size
+        _aligned_size(header_size, _HEADER_SIZE, header_path)
+        _aligned_size(text_size, _BLOCK_SIZE, text_path)
+        if header_size // _HEADER_SIZE < len(index) // _INDEX_SIZE:
+            _invalid(header_path, header_size, "Indexed header record is missing")
+        result: list[tuple[int, bytes, int, int, tuple[int, ...]]] = []
         seen: set[int] = set()
-        for slot in range(len(index) // _INDEX_SIZE):
-            msgno, board = struct.unpack_from("<HB", index, slot * _INDEX_SIZE)
-            if msgno == 0xFFFF:
-                continue
-            base = slot * _HEADER_SIZE
-            raw = headers[base : base + _HEADER_SIZE]
-            words = struct.unpack_from("<10H2BH3B", raw)
-            if words[13] & 1:
-                continue
-            if not 1 <= msgno <= 65534:
-                _invalid(
-                    index_path,
-                    slot * _INDEX_SIZE,
-                    f"Invalid active message number {msgno}",
+        with header_path.open("rb") as headers_file:
+            for slot in range(len(index) // _INDEX_SIZE):
+                msgno, board = struct.unpack_from("<HB", index, slot * _INDEX_SIZE)
+                if msgno == 0xFFFF:
+                    continue
+                base = slot * _HEADER_SIZE
+                raw = _read_at(headers_file, base, _HEADER_SIZE, header_path)
+                words = struct.unpack_from("<10H2BH3B", raw)
+                if words[13] & 1:
+                    continue
+                if not 1 <= msgno <= 65534:
+                    _invalid(
+                        index_path,
+                        slot * _INDEX_SIZE,
+                        f"Invalid active message number {msgno}",
+                    )
+                if not 1 <= board <= 200:
+                    _invalid(
+                        index_path,
+                        slot * _INDEX_SIZE + 2,
+                        f"Invalid active board {board}",
+                    )
+                if words[0] != msgno:
+                    _invalid(
+                        header_path,
+                        base,
+                        f"Header message number {words[0]} differs from index {msgno}",
+                    )
+                if words[15] != board:
+                    _invalid(
+                        header_path,
+                        base + 26,
+                        f"Header board {words[15]} differs from index {board}",
+                    )
+                if msgno in seen:
+                    _invalid(
+                        index_path,
+                        slot * _INDEX_SIZE,
+                        f"Duplicate active message number {msgno}",
+                    )
+                seen.add(msgno)
+                result.append((msgno, raw, base, board, words))
+        ordered = sorted(result, key=lambda item: item[0])
+        with text_path.open("rb") as texts_file:
+            if options.eager:
+                yield from tuple(
+                    self._message(
+                        raw,
+                        base,
+                        msgno,
+                        board,
+                        words,
+                        texts_file,
+                        header_path,
+                        text_path,
+                        options,
+                        text_size=text_size,
+                    )
+                    for msgno, raw, base, board, words in ordered
                 )
-            if not 1 <= board <= 200:
-                _invalid(
-                    index_path, slot * _INDEX_SIZE + 2, f"Invalid active board {board}"
-                )
-            if words[0] != msgno:
-                _invalid(
-                    header_path,
-                    base,
-                    f"Header message number {words[0]} differs from index {msgno}",
-                )
-            if words[15] != board:
-                _invalid(
-                    header_path,
-                    base + 26,
-                    f"Header board {words[15]} differs from index {board}",
-                )
-            if msgno in seen:
-                _invalid(
-                    index_path,
-                    slot * _INDEX_SIZE,
-                    f"Duplicate active message number {msgno}",
-                )
-            seen.add(msgno)
-            result.append(
-                self._message(
+                return
+            for msgno, raw, base, board, words in ordered:
+                yield self._message(
                     raw,
                     base,
                     msgno,
                     board,
                     words,
-                    texts,
+                    texts_file,
                     header_path,
                     text_path,
                     options,
+                    text_size=text_size,
                 )
-            )
-        yield from sorted(result, key=lambda message: message.msgno)
 
     @staticmethod
     def _message(
@@ -399,15 +455,31 @@ class HudsonReader:
         msgno: int,
         board: int,
         words: tuple[int, ...],
-        texts: bytes,
+        texts: bytes | BinaryIO,
         header_path: Path,
         text_path: Path,
         options: ReaderOptions,
         charset_override: str | None = None,
+        *,
+        text_size: int | None = None,
     ) -> ParsedMessage:
         date = _pascal(raw, 33, 9, header_path, base)
         clock = _pascal(raw, 27, 6, header_path, base)
-        text = _Text(texts, words[4], words[5], text_path)
+        start, count = words[4], words[5]
+        if isinstance(texts, (bytes, bytearray)):
+            text = _Text(texts, start, count, text_path)
+        else:
+            file_base = start * _BLOCK_SIZE if count else 0
+            length = count * _BLOCK_SIZE
+            assert text_size is not None
+            if file_base > text_size or length > text_size - file_base:
+                _invalid(
+                    text_path,
+                    file_base,
+                    f"Text span of {length} bytes lies outside file",
+                )
+            span = _read_at(texts, file_base, length, text_path) if count else b""
+            text = _Text.from_span(span, file_base, count, text_path)
         charset = _charset(text, options, text_path)
         if charset_override is not None:
             charset = charset_override

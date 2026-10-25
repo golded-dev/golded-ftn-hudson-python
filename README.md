@@ -2,12 +2,12 @@
 
 Repository: [`golded-ftn-hudson-python`](https://github.com/golded-dev/golded-ftn-hudson-python).
 The distribution remains `golded-ftn-hudson`; imports use `golded_ftn_hudson`.
-The source is public on GitHub. [Version 1.2.0 is available on PyPI](https://pypi.org/project/golded-ftn-hudson/1.2.0/).
+The source is public on GitHub. [Version 1.3.0 is available on PyPI](https://pypi.org/project/golded-ftn-hudson/1.3.0/).
 
 Install with Python 3.12 or newer:
 
 ```sh
-python -m pip install golded-ftn-hudson==1.2.0
+python -m pip install golded-ftn-hudson==1.3.0
 ```
 
 Read and edit classic Hudson bases through the `golded-ftn` models. Python 3.12+.
@@ -61,12 +61,14 @@ body ignores its unused start-record value. Core body
 normalization removes trailing NULs and normalizes line endings.
 
 The reader validates record alignment, header availability, Pascal field bounds
-and active text spans. It reads all three files into memory and validates every
-active message before yielding the first result. A malformed later message cannot
-leave a partial result. Filesystem errors remain filesystem errors. Damaged data
-and strict decoding failures raise `ParserException` with the actual filename,
-physical byte offset and chained cause. Complete unused records are not checked
-for content validity; file alignment is checked throughout.
+and active text spans. By default it loads the index, seeks headers and text
+spans, and yields messages as they are parsed. Pass `ReaderOptions(eager=True)`
+to parse every active message before yielding; in eager mode a malformed later
+message cannot leave a partial result. Filesystem errors remain filesystem
+errors. Damaged data and strict decoding failures raise `ParserException` with
+the actual filename, physical byte offset and chained cause. Complete unused
+records are not checked for content validity; file alignment is checked
+throughout.
 
 Read a stable directory with no concurrent writes. Files are read separately,
 without locking or a transactional snapshot. Stop the writer or use a consistent
@@ -116,7 +118,7 @@ uv run python scripts/verify_distribution.py
 ```
 
 uv uses sibling `../golded-ftn-python` for development. Distribution metadata contains
-only `golded-ftn>=1.2.0,<2`. The sdist hook strips the local uv source mapping;
+only `golded-ftn>=1.4.0,<2`. The sdist hook strips the local uv source mapping;
 the development lock is excluded. See [contributing](CONTRIBUTING.md) and
 [release checks](docs/release.md).
 
@@ -165,8 +167,10 @@ decoding failures are skipped; there is no lossy decoding or mojibake repair.
 ## Offline writer
 
 `HudsonWriter.create(path)` creates the complete base, not one board. It rejects
-any existing base filename, including case variants. Initial files are
-`MSGINFO.BBS` (406 zero bytes), `LASTREAD.BBS` (400 zero bytes), empty
+any existing base filename, including case variants. Pass
+`HudsonWriterOptions(extension_case="lower")` to create `msginfo.bbs` and
+friends instead. Open and read already use the casing that is on disk. Initial
+files are `MSGINFO.BBS` (406 zero bytes), `LASTREAD.BBS` (400 zero bytes), empty
 `MSGHDR.BBS`, `MSGIDX.BBS`, `MSGTOIDX.BBS`, `MSGTXT.BBS`, `NETMAIL.BBS` and
 `ECHOMAIL.BBS`. Existing lastread data is never changed by editing operations.
 
@@ -223,6 +227,13 @@ conflicting explicit controls are rejected. Pure attribute updates preserve all 
 append fresh 256-byte Pascal text blocks and change the existing header slot.
 Old blocks remain allocated; there is no packing or repair.
 
+`HudsonWriter.recovery_session(path, *, recovery_root, options=None, scan_path=..., board=1)`
+holds the same `MSGINFO.BBS` byte-407 lock across prepare/apply/settle for the
+whole physical base. Board is only a write target; it is not the lock or worker
+identity. Recovery covers the common Hudson files and scan queues in `scan_dir`.
+`LASTREAD.BBS` and `USERS.BBS` are never opened. Years outside 1980–2079 raise
+`HudsonAdapterError` without coercing the date.
+
 The default encoding is CP850. Serialization uses strict encoding, rejects
 oversized Pascal fields, out-of-range integers and contradictory charset controls,
 and does not generate MSGID or routing, or perform duplicate checks. Dates are naive and
@@ -244,19 +255,34 @@ Each completed operation is a separate commit. Before any mutation the writer
 snapshots every affected file, restores bytes and sizes in place on failure and
 keeps previous completed operations. A failed rollback raises `RollbackError`
 with base and operation details and makes the session unusable. This protects
-handled I/O failures, not process termination or power loss. There is no crash
-journal or claim that every partial write can be detected.
+handled I/O failures, not process termination or power loss. Ordinary open() has no crash
+journal; use recovery_session() with a durable caller journal for staged recovery.
 
-| Platform | Writer mode | GoldED compatibility |
-| --- | --- | --- |
-| macOS | Offline; byte-407 lock and rollback tested locally | Current-build integration deferred |
-| Linux | Offline; POSIX record-lock implementation | Not exercised here |
-| Windows | Offline; core Windows lock implementation | Not exercised here |
+## GoldED compatibility profile
 
-`WriterOptions(concurrent=True)` raises `UnsupportedOperationError` on every
-platform. Stop GoldED while reading or editing a base. The standalone
-`HudsonReader` still requires a stable directory; session `read()` supplies a
-locked consistent read. Live support needs both competing writes and GoldED's
-scan/cache/refresh behavior tested against a pinned build.
+Candidate interoperability is bounded to GoldED source commit `d7449053bd674df54c4a442c92dce8c06ad7b586`,
+version 3.1.0, native macOS arm64/GCC 16 and Ubuntu 24.04 aarch64/GCC 13.
+The suite release manifest pins the resulting binaries and records actual checks.
+Other GoldED versions, Windows and network filesystems are not qualified.
+
+Writers default to offline operation. Explicit `concurrent=True` opts into the
+tested read/write/refresh/lastread/stale-save profile, not a general multiwriter
+guarantee. Standalone readers still need a stable base; a session read uses its
+format lock. MSG/Opus and Goldbase have no shared GoldED writer lock: stale-save
+detection cannot close a race between comparison and a foreign write. Keep
+same-message edits serialized. Goldbase is outside the Python C1 profile.
+
+Use format-specific WriterOptions extension_case="lower" for newly created
+Unix bases used by GoldED; preserve existing casing and reject ambiguous twins.
+Hudson scan queues belong in the configured system directory. Recovery sessions
+have a durable journal protocol; ordinary open() sessions only roll back handled
+I/O failures. UNKNOWN outcomes retain artifacts for operator reconciliation.
 
 Source evidence and test coverage are recorded in [writer notes](docs/writer.md).
+
+## Candidate 1.3.0
+
+Add recoverable sessions and existing-case resolution. Keep board-specific access and configured scan directory; translate format-owned attributes at the packet boundary.
+
+Linux and macOS, Python 3.12–3.14, are the release targets. Windows is outside
+this candidate's test and compatibility promises. See [release preparation](docs/release.md).
