@@ -1,12 +1,11 @@
 # Changelog
 
-## 1.3.0 (unreleased)
+## 1.3.0 — 2026-10-25
 
-- Add recoverable sessions and existing-case resolution. Keep board-specific access and configured scan directory; translate format-owned attributes at the packet boundary.
-
-## 1.3.0 — 2026-10-17
-
-- Require `golded-ftn>=1.3.0,<2`.
+- Add recoverable sessions and existing-case resolution.
+- Keep board-specific access and the configured scan directory; translate
+  format-owned attributes at the packet boundary.
+- Require `golded-ftn>=1.4.0,<2`.
 - Add `HudsonWriter.recovery_session` implementing `RecoverableMessageBaseWriter`.
 - One physical base lock on `MSGINFO.BBS` byte 407 covers all 200 boards; reuse that descriptor. Recovery plans include the common Hudson files and `NETMAIL.BBS` / `ECHOMAIL.BBS` in `scan_dir`. Never touch `LASTREAD.BBS` or `USERS.BBS`.
 - Register `scan_dir` per physical base; a conflicting directory raises `RecoveryError(code="conflicting_scan_dir")`.

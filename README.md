@@ -61,12 +61,14 @@ body ignores its unused start-record value. Core body
 normalization removes trailing NULs and normalizes line endings.
 
 The reader validates record alignment, header availability, Pascal field bounds
-and active text spans. It reads all three files into memory and validates every
-active message before yielding the first result. A malformed later message cannot
-leave a partial result. Filesystem errors remain filesystem errors. Damaged data
-and strict decoding failures raise `ParserException` with the actual filename,
-physical byte offset and chained cause. Complete unused records are not checked
-for content validity; file alignment is checked throughout.
+and active text spans. By default it loads the index, seeks headers and text
+spans, and yields messages as they are parsed. Pass `ReaderOptions(eager=True)`
+to parse every active message before yielding; in eager mode a malformed later
+message cannot leave a partial result. Filesystem errors remain filesystem
+errors. Damaged data and strict decoding failures raise `ParserException` with
+the actual filename, physical byte offset and chained cause. Complete unused
+records are not checked for content validity; file alignment is checked
+throughout.
 
 Read a stable directory with no concurrent writes. Files are read separately,
 without locking or a transactional snapshot. Stop the writer or use a consistent
@@ -116,7 +118,7 @@ uv run python scripts/verify_distribution.py
 ```
 
 uv uses sibling `../golded-ftn-python` for development. Distribution metadata contains
-only `golded-ftn>=1.3.0,<2`. The sdist hook strips the local uv source mapping;
+only `golded-ftn>=1.4.0,<2`. The sdist hook strips the local uv source mapping;
 the development lock is excluded. See [contributing](CONTRIBUTING.md) and
 [release checks](docs/release.md).
 
