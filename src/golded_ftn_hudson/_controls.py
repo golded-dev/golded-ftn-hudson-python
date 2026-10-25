@@ -54,13 +54,14 @@ def resolve_addresses(
             addresses = [FtnAddress.try_from_string(token) for token in tokens]
             if any(
                 address is None
+                or address.zone is None
                 or address.domain is not None
                 or address.point is not None
                 for address in addresses
             ):
                 continue
             for side, address in zip(("to", "from"), addresses, strict=True):
-                assert address is not None
+                assert address is not None and address.zone is not None
                 merge(side, (address.zone, address.net, address.node))
         elif control.name.upper() in ("FMPT", "TOPT") and re.fullmatch(
             r"[0-9]+", control.value

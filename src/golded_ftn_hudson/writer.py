@@ -848,7 +848,13 @@ class HudsonSession:
                 if address is not None and not isinstance(address, FtnAddress):
                     raise ValueError(f"{name} must be an FTN address")
                 zone, net, node = (
-                    (address.zone, address.net, address.node) if address else (0, 0, 0)
+                    (
+                        0 if address.zone is None else address.zone,
+                        address.net,
+                        address.node,
+                    )
+                    if address
+                    else (0, 0, 0)
                 )
                 raw[offsets[0]] = _word(zone, "zone", 255)
                 struct.pack_into("<H", raw, offsets[1], _word(net, "net"))
