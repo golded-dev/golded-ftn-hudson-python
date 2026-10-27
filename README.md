@@ -2,12 +2,12 @@
 
 Repository: [`golded-ftn-hudson-python`](https://github.com/golded-dev/golded-ftn-hudson-python).
 The distribution remains `golded-ftn-hudson`; imports use `golded_ftn_hudson`.
-The source is public on GitHub. [Version 1.3.0 is available on PyPI](https://pypi.org/project/golded-ftn-hudson/1.3.0/).
+The source is public on GitHub. [Version 1.4.0 is available on PyPI](https://pypi.org/project/golded-ftn-hudson/1.4.0/).
 
 Install with Python 3.12 or newer:
 
 ```sh
-python -m pip install golded-ftn-hudson==1.3.0
+python -m pip install golded-ftn-hudson==1.4.0
 ```
 
 Read and edit classic Hudson bases through the `golded-ftn` models. Python 3.12+.
