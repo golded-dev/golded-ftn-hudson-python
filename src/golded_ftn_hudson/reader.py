@@ -550,7 +550,7 @@ class HudsonReader:
             to_address=str(destination) if destination else None,
             reply_to_msgno=words[1] or None,
             reply1st_msgno=words[2] or None,
-            area_code=f"BOARD{board}",
+            area=f"BOARD{board}",
             area_meta_key=f"hudson:{board}",
             control_lines=controls,
             provenance=MessageProvenance(

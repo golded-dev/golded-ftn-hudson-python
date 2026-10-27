@@ -1,2 +1,2 @@
-5545bcc59e792f5cec59a694bbc37dbab543aa4d0701224191e9397bfb2cc7f5  dist/golded_ftn_hudson-1.3.0-py3-none-any.whl
-39c633e97f14f3e14b788834b7343c290e3f75ac913e6b5cd74687fec2a5c0ff  dist/golded_ftn_hudson-1.3.0.tar.gz
+fbf928126307cb4024741b2328f443e746a59747b2fb02f8ea33d39489e920ae  dist/golded_ftn_hudson-1.4.0-py3-none-any.whl
+52252069801774f3c1ae27a71006076a688e47b3ddb617a93f5fb4de88ecad95  dist/golded_ftn_hudson-1.4.0.tar.gz

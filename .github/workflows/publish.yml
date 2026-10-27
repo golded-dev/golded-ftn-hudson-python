@@ -5,7 +5,7 @@ on:
       tag:
         description: Reviewed GitHub release tag
         required: true
-        default: v1.3.0
+        default: v1.4.0
         type: string
 permissions:
   contents: read
