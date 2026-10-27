@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.0 — 2026-10-27
+
+- Return board-derived metadata through ParsedMessage.area.
+- Require golded-ftn 1.5.0 or newer.
+
 ## 1.3.0 — 2026-10-25
 
 - Add recoverable sessions and existing-case resolution.

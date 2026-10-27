@@ -126,7 +126,7 @@ def test_public_contract_and_mapping(tmp_path: Path) -> None:
         message.reply1st_msgno,
         message.reply_next_msgno,
     ) == (12, 13, None)
-    assert message.area_code == "BOARD7"
+    assert message.area == "BOARD7"
     assert message.area_meta_key == "hudson:7"
     assert message.area_name is None
     assert message.area_sort_order is None

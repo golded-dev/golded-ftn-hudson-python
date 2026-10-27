@@ -95,7 +95,7 @@ zero becomes `None`. The read-count word is not a next-reply link, so
 `reply_next_msgno` is `None`. MSGID supplies `external_id`; otherwise core produces
 a synthetic ID over decoded, normalized fields.
 
-Each board becomes `area_code="BOARD<n>"` and `area_meta_key="hudson:<n>"`.
+Each board becomes `area="BOARD<n>"` and `area_meta_key="hudson:<n>"`.
 These are synthetic identifiers. `area_name` and `area_sort_order` remain `None`
 because the base does not store configured area names or their display order.
 Provenance identifies `hudson`, the actual `MSGHDR.BBS` path, the message number
